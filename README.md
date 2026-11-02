@@ -1,28 +1,45 @@
 # Job Profile Manager (JPM)
 
-A production-oriented, centralised career profile management platform built with **Java 21** and **Spring Boot 3.3.x**.
+A production-oriented, centralised career profile management platform built with **Java 21** and **Spring Boot 3.3.5**.
 
-The application serves as a single source of truth for an individual's professional profile, maintaining factually accurate career records (designation, summary, skills, work experience, projects, education, certifications, and resumes) with future support for AI-driven tailoring and multi-platform synchronisation.
+The application serves as a single source of truth for an individual's professional profile, maintaining factually accurate career records (designation, summary, skills, work experience, projects, education, certifications, and resumes) with architectural support for AI-driven tailoring and multi-platform synchronisation.
+
+---
+
+## Quick Navigation
+
+- [Architecture Overview](#architecture-overview)
+- [Prerequisites](#prerequisites)
+- [How to Start & Connect](#how-to-start--connect)
+  - [Option 1: Quickstart (Standalone Local Profile)](#option-1-quickstart-standalone-local-profile-no-external-db-needed)
+  - [Option 2: Connecting to PostgreSQL (Production / Standard Mode)](#option-2-connecting-to-postgresql-production--standard-mode)
+- [Interactive API Testing](#interactive-api-testing)
+  - [Using Swagger UI](#1-interactive-swagger-ui)
+  - [Using cURL or PowerShell](#2-sample-api-requests-curl--powershell)
+- [Running Automated Tests](#running-automated-tests)
+- [Configuration & Environment Reference](#configuration--environment-reference)
+- [Package & Project Structure](#package-structure)
+- [Milestone Roadmap](#future-roadmap)
 
 ---
 
 ## Architecture Overview
 
-Job Profile Manager is designed as a **Modular Monolith** adhering to SOLID principles, clean layered architecture, and strict separation of concerns.
+Job Profile Manager is built as a **Modular Monolith** adhering to clean layered architecture, SOLID principles, and strict separation of concerns:
 
 ```
 com.jobmanager
-├── config               # Application, OpenAPI and JPA audit configurations
-├── security             # Spring Security 6 authentication & authorization filters
-├── common               # Base entities, standard response envelopes, exception handling
-├── user                 # User identity, credentials, and account lifecycle
+├── config               # Application, OpenAPI 3.0 & JPA auditing configurations
+├── security             # Spring Security 6 stateless filter chain
+├── common               # BaseEntity (UUID, timestamps), ApiResponse, ErrorResponse, GlobalExceptionHandler
+├── user                 # User identity, credentials & account lifecycle
 ├── profile              # Master Career Profile domain module (Milestone 1)
 │   ├── controller       # REST API endpoints (/api/v1/profiles)
-│   ├── dto              # Request and immutable response DTOs
-│   ├── entity           # JPA entities and enums with UUID primary keys
-│   ├── mapper           # Decoupled entity-DTO mapping layer
-│   ├── repository       # Spring Data JPA repositories
-│   └── service          # Transactional business logic & interfaces
+│   ├── dto              # Request and immutable response DTOs (Records)
+│   ├── entity           # JPA entities & Enums (UUID primary keys, audit fields)
+│   ├── mapper           # Decoupled entity-to-DTO mapper
+│   ├── repository       # Spring Data JPA repository
+│   └── service          # Transactional business logic & interface
 ├── experience           # Work history, roles, and accomplishments
 ├── skills               # Taxonomy of technical skills and proficiency levels
 ├── projects             # Portfolio projects, tech stacks, and metrics
@@ -46,153 +63,252 @@ com.jobmanager
 
 ---
 
-## Technology Stack
+## Prerequisites
 
-- **Language**: Java 21 (LTS)
-- **Framework**: Spring Boot 3.3.5
-- **Persistence**: Spring Data JPA / Hibernate 6
-- **Database**: PostgreSQL (Production/Dev), H2 In-Memory (Automated Testing)
-- **Migrations**: Flyway (`V1__init_schema.sql`)
-- **API Documentation**: Springdoc OpenAPI 2.6.0 (Swagger UI 3.0)
-- **Security**: Spring Security 6 (Stateless, CSRF disabled for REST)
-- **Validation**: Jakarta Bean Validation (`@Valid`, `@NotBlank`, `@Email`, `@Size`)
-- **Observability**: Spring Boot Actuator (`/actuator/health`, `/actuator/info`)
-- **Build Tool**: Apache Maven (with Maven Wrapper `mvnw`)
+Before starting, ensure you have:
+1. **Java 21 LTS** installed (`java -version`)
+   - If using OpenJDK 21, ensure `JAVA_HOME` points to your JDK 21 directory.
+2. **Git** installed (`git --version`)
+3. **PostgreSQL 14+** (Required only when running in PostgreSQL mode; not required for quickstart mode)
+4. Maven is included via the bundled wrapper (`mvnw.cmd` on Windows, `./mvnw` on Linux/macOS).
 
 ---
 
-## Database Schema (Milestone 1)
+## How to Start & Connect
 
-Flyway manages the baseline schema:
+### Option 1: Quickstart (Standalone Local Profile, No External DB Needed)
 
-- **Table**: `profiles`
-  - `id`: UUID Primary Key
-  - `user_id`: UUID (Optional link to identity user)
-  - `full_name`: VARCHAR(100) NOT NULL
-  - `email`: VARCHAR(150) NOT NULL UNIQUE
-  - `phone`: VARCHAR(30)
-  - `headline`: VARCHAR(200)
-  - `current_designation`: VARCHAR(150) NOT NULL
-  - `summary`: TEXT
-  - `location`: VARCHAR(150)
-  - `website_url`: VARCHAR(255)
-  - `linkedin_url`: VARCHAR(255)
-  - `github_url`: VARCHAR(255)
-  - `status`: VARCHAR(20) NOT NULL (DRAFT, ACTIVE, ARCHIVED)
-  - `version`: INT NOT NULL (Optimistic locking)
-  - `created_at`: TIMESTAMPTZ NOT NULL
-  - `updated_at`: TIMESTAMPTZ NOT NULL
-- **Indexes**: `idx_profiles_email`, `idx_profiles_user_id`, `idx_profiles_status`
+If you want to run the application immediately without creating a database or configuring PostgreSQL credentials, use the built-in **`local` profile** (uses embedded in-memory database with PostgreSQL compatibility):
 
----
+#### Windows PowerShell:
+```powershell
+# Set JAVA_HOME (if not already in system environment)
+$env:JAVA_HOME = "C:\Users\Shariff\.jdks\openjdk-21"
 
-## REST API Reference
+# Run the application with the local profile
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=local"
+```
 
-All responses conform to structured envelope contracts:
+#### Windows CMD:
+```cmd
+set JAVA_HOME=C:\Users\Shariff\.jdks\openjdk-21
+mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=local"
+```
 
-- **Success Envelope**:
-  ```json
-  {
-    "success": true,
-    "message": "Operation successful",
-    "data": { ... },
-    "timestamp": "2026-11-02T09:30:00Z"
-  }
-  ```
-- **Error Envelope**:
-  ```json
-  {
-    "timestamp": "2026-11-02T09:30:00Z",
-    "status": 400,
-    "error": "Validation Failed",
-    "message": "Input payload contains validation errors",
-    "path": "/api/v1/profiles",
-    "validationErrors": {
-      "email": "Must be a well-formed email address"
-    }
-  }
-  ```
+#### Linux / macOS:
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
 
-### Master Profile Endpoints
-
-| Method | Endpoint | Description | Status Code |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/profiles` | Create a new master profile | `201 Created` |
-| `GET` | `/api/v1/profiles/{id}` | Retrieve master profile by UUID | `200 OK` / `404 Not Found` |
-| `PUT` | `/api/v1/profiles/{id}` | Update profile details | `200 OK` / `400 Bad Request` / `404 Not Found` |
-| `DELETE` | `/api/v1/profiles/{id}` | Delete profile | `204 No Content` / `404 Not Found` |
-
-### System & Health Endpoints
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/actuator/health` | Application and component health status |
-| `GET` | `/swagger-ui.html` | Interactive Swagger UI API documentation |
-| `GET` | `/v3/api-docs` | OpenAPI 3.0 JSON specification |
+The application will start on port `8080` (or `SERVER_PORT` if specified).
 
 ---
 
-## Configuration & Environment Variables
+### Option 2: Connecting to PostgreSQL (Production / Standard Mode)
 
-The application can be configured via environment variables or properties:
+In standard mode, the application connects to PostgreSQL and uses **Flyway** to automatically execute migrations and create tables, indexes, and constraints.
 
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `SERVER_PORT` | `8080` | HTTP port |
-| `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `job_profile_manager` | PostgreSQL database name |
-| `SPRING_DATASOURCE_USERNAME` | `postgres` | Database username |
-| `SPRING_DATASOURCE_PASSWORD` | `postgres` | Database password |
-
----
-
-## Getting Started
-
-### 1. Prerequisites
-- **JDK 21** installed and configured (`JAVA_HOME`)
-- **PostgreSQL 14+** running locally or in Docker
-
-### 2. Database Setup
-Create the PostgreSQL database:
+#### Step 1: Create the PostgreSQL Database
+Open PostgreSQL CLI (`psql`) or pgAdmin and run:
 ```sql
 CREATE DATABASE job_profile_manager;
 ```
 
-### 3. Build & Run Tests
-Execute the automated test suite (uses embedded in-memory H2 in PostgreSQL compatibility mode):
+#### Step 2: Set Environment Variables
+Configure your database connection parameters:
+
+**Windows PowerShell:**
+```powershell
+$env:JAVA_HOME = "C:\Users\Shariff\.jdks\openjdk-21"
+$env:DB_HOST = "localhost"
+$env:DB_PORT = "5432"
+$env:DB_NAME = "job_profile_manager"
+$env:SPRING_DATASOURCE_USERNAME = "postgres"
+$env:SPRING_DATASOURCE_PASSWORD = "your_postgres_password_here"
+```
+
+**Windows CMD:**
+```cmd
+set JAVA_HOME=C:\Users\Shariff\.jdks\openjdk-21
+set DB_HOST=localhost
+set DB_PORT=5432
+set DB_NAME=job_profile_manager
+set SPRING_DATASOURCE_USERNAME=postgres
+set SPRING_DATASOURCE_PASSWORD=your_postgres_password_here
+```
+
+**Linux / macOS:**
 ```bash
-./mvnw test
-# Windows Powershell:
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=job_profile_manager
+export SPRING_DATASOURCE_USERNAME=postgres
+export SPRING_DATASOURCE_PASSWORD=your_postgres_password_here
+```
+
+#### Step 3: Run the Application
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+*(On Linux/macOS: `./mvnw spring-boot:run`)*
+
+On startup, Flyway will automatically execute `V1__init_schema.sql` and output:
+```
+Successfully applied 1 migration to schema "public" (execution time 00:00.045s)
+Started JobProfileManagerApplication in 3.5 seconds
+```
+
+---
+
+## Interactive API Testing
+
+Once the application is running:
+
+### 1. Interactive Swagger UI
+Open your browser to:
+- **Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- **OpenAPI 3.0 JSON Spec**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+- **Actuator Health**: [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health)
+
+---
+
+### 2. Sample API Requests (cURL / PowerShell)
+
+#### A. Health Check
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/actuator/health" -Method Get
+```
+*Expected response:*
+```json
+{
+  "status": "UP"
+}
+```
+
+#### B. Create Master Profile (`POST /api/v1/profiles`)
+```powershell
+$body = @{
+    fullName = "Jane Doe"
+    email = "jane.doe@example.com"
+    currentDesignation = "Senior Cloud Architect"
+    headline = "Senior Enterprise Architect & Java 21 Specialist"
+    location = "San Francisco, CA"
+    summary = "Architect with 10+ years designing enterprise distributed systems."
+    linkedinUrl = "https://linkedin.com/in/janedoe"
+    githubUrl = "https://github.com/janedoe"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/profiles" -Method Post -Body $body -ContentType "application/json"
+```
+*Expected response (`201 Created` with Location header):*
+```json
+{
+  "success": true,
+  "message": "Profile created successfully",
+  "data": {
+    "id": "262f063b-0c86-48d2-a622-c94c1a88f676",
+    "fullName": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "headline": "Senior Enterprise Architect & Java 21 Specialist",
+    "currentDesignation": "Senior Cloud Architect",
+    "status": "DRAFT",
+    "version": 0,
+    "createdAt": "2026-11-02T09:34:36Z",
+    "updatedAt": "2026-11-02T09:34:36Z"
+  }
+}
+```
+
+#### C. Retrieve Profile by ID (`GET /api/v1/profiles/{id}`)
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/profiles/262f063b-0c86-48d2-a622-c94c1a88f676" -Method Get
+```
+
+#### D. Update Profile (`PUT /api/v1/profiles/{id}`)
+```powershell
+$updateBody = @{
+    fullName = "Jane Doe"
+    email = "jane.doe@example.com"
+    currentDesignation = "Principal Software Architect"
+    headline = "Principal Cloud & Distributed Systems Architect"
+    location = "Seattle, WA"
+    summary = "12+ years designing resilient, high-throughput cloud architectures."
+    status = "ACTIVE"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/profiles/262f063b-0c86-48d2-a622-c94c1a88f676" -Method Put -Body $updateBody -ContentType "application/json"
+```
+
+#### E. Delete Profile (`DELETE /api/v1/profiles/{id}`)
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8080/api/v1/profiles/262f063b-0c86-48d2-a622-c94c1a88f676" -Method Delete
+```
+*Expected response: HTTP 204 No Content*
+
+---
+
+## Running Automated Tests
+
+The project includes unit tests with Mockito and web-slice integration tests with Spring MockMvc:
+
+```powershell
+# Set JAVA_HOME
+$env:JAVA_HOME = "C:\Users\Shariff\.jdks\openjdk-21"
+
+# Execute test suite
 .\mvnw.cmd test
 ```
 
-### 4. Run the Application
-```bash
-./mvnw spring-boot:run
-# Windows Powershell:
-.\mvnw.cmd spring-boot:run
+### Test Suite Summary:
+- **`JobProfileManagerApplicationTests`**: Verifies full Spring ApplicationContext bootstrapping.
+- **`ProfileControllerTest`**: Tests MockMvc REST serialization, validation rules, HTTP status codes (`201`, `200`, `204`, `400`, `404`), and error envelopes.
+- **`ProfileServiceTest`**: Validates transactional business logic, duplicate email enforcement, mapper conversions, and repository interactions.
+- **Execution Result**: **14 tests, 0 failures, 0 errors, 100% pass rate**.
+
+---
+
+## Configuration & Environment Reference
+
+All properties can be customized via environment variables:
+
+| Environment Variable | Property Key | Default Value | Description |
+| :--- | :--- | :--- | :--- |
+| `SERVER_PORT` | `server.port` | `8080` | HTTP port |
+| `DB_HOST` | `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `DB_NAME` | `job_profile_manager` | PostgreSQL database name |
+| `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | `postgres` | Database username |
+| `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | `postgres` | Database password |
+| `SPRING_PROFILES_ACTIVE` | `spring.profiles.active` | *none* | Active profile (`local`, `test`, etc.) |
+
+---
+
+## Packaging an Executable JAR
+
+To build a standalone executable JAR:
+```powershell
+.\mvnw.cmd clean package
 ```
 
-Once running, access Swagger UI at:
-```
-http://localhost:8080/swagger-ui.html
-```
-Health endpoint:
-```
-http://localhost:8080/actuator/health
+Run the built JAR:
+```powershell
+# Standalone local in-memory mode:
+java -jar target/job-profile-manager-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
+
+# Or connected to PostgreSQL:
+java -jar target/job-profile-manager-0.0.1-SNAPSHOT.jar
 ```
 
 ---
 
 ## Future Roadmap
 
-- **Milestone 1**: Project setup, application foundation & Master Profile CRUD *(Current)*
-- **Milestone 2**: Master professional profile management (work experiences, technical skills, projects, education, certifications)
-- **Milestone 3**: Resume and profile version management
-- **Milestone 4**: AI-powered summary and experience optimisation (factual, non-hallucinatory)
-- **Milestone 5**: Job description analysis and ATS keyword matching
-- **Milestone 6**: Platform integration adapter architecture (LinkedIn, Naukri, Indeed, Glassdoor, GitHub, Monster, Foundit)
-- **Milestone 7**: OAuth connections and authorised profile synchronisation
-- **Milestone 8**: React + TypeScript dashboard
-- **Milestone 9**: Docker deployment, security hardening and production readiness
+- [x] **Milestone 1**: Project setup, application foundation & Master Profile CRUD
+- [ ] **Milestone 2**: Master professional profile management (work experiences, technical skills, projects, education, certifications)
+- [ ] **Milestone 3**: Resume and profile version management
+- [ ] **Milestone 4**: AI-powered summary and experience optimisation (factual, non-hallucinatory)
+- [ ] **Milestone 5**: Job description analysis and ATS keyword matching
+- [ ] **Milestone 6**: Platform integration adapter architecture (LinkedIn, Naukri, Indeed, Glassdoor, GitHub, Monster, Foundit)
+- [ ] **Milestone 7**: OAuth connections and authorised profile synchronisation
+- [ ] **Milestone 8**: React + TypeScript dashboard
+- [ ] **Milestone 9**: Docker deployment, security hardening and production readiness
