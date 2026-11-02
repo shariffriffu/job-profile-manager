@@ -13,6 +13,7 @@ The application serves as a single source of truth for an individual's professio
 - [How to Start & Connect](#how-to-start--connect)
   - [Option 1: Quickstart (Standalone Local Profile)](#option-1-quickstart-standalone-local-profile-no-external-db-needed)
   - [Option 2: Connecting to PostgreSQL (Production / Standard Mode)](#option-2-connecting-to-postgresql-production--standard-mode)
+  - [Option 3: Running with Docker & Docker Compose](#option-3-running-with-docker--docker-compose-containerized-stack)
 - [Interactive API Testing](#interactive-api-testing)
   - [Using Swagger UI](#1-interactive-swagger-ui)
   - [Using cURL or PowerShell](#2-sample-api-requests-curl--powershell)
@@ -156,6 +157,50 @@ On startup, Flyway will automatically execute `V1__init_schema.sql` and output:
 ```
 Successfully applied 1 migration to schema "public" (execution time 00:00.045s)
 Started JobProfileManagerApplication in 3.5 seconds
+```
+
+---
+
+### Option 3: Running with Docker & Docker Compose (Containerized Stack)
+
+The project includes a multi-stage [Dockerfile](file:///d:/Personal/job-profile-manager/Dockerfile) and [docker-compose.yml](file:///d:/Personal/job-profile-manager/docker-compose.yml) that sets up the Spring Boot backend alongside a managed PostgreSQL 16 container, network, and persistent storage.
+
+#### A. One-Command Launch (Backend + PostgreSQL)
+```bash
+docker compose up -d --build
+```
+
+This will:
+1. Build the production image using `eclipse-temurin:21-jre-jammy` with an unprivileged non-root user (`spring:spring`).
+2. Boot PostgreSQL 16 with health checks and persistent volume `postgres_data`.
+3. Wait for PostgreSQL to become healthy before starting the Spring Boot backend.
+4. Run Flyway schema migrations on startup.
+5. Expose the API and Swagger UI on `http://localhost:8080`.
+
+#### B. Build the Docker Image Individually
+```bash
+docker build -t job-profile-manager:latest .
+```
+
+#### C. Run the Standalone Container
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=local \
+  --name jpm-app \
+  job-profile-manager:latest
+```
+
+#### D. View Logs & Stop Stack
+```bash
+# Check container logs
+docker compose logs -f app
+
+# Stop the entire stack
+docker compose down
+
+# Stop and remove volumes (resets database)
+docker compose down -v
 ```
 
 ---
